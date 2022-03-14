@@ -3,8 +3,11 @@
 # International Conference on Learning Representations (ICLR), 2019.
 
 import numpy as np
+import sys
+sys.path.append('../utils')
 
-from utils import *
+
+from search.utils import *
 
 
 class DataProvider:
