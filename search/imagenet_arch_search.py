@@ -185,6 +185,7 @@ if __name__ == '__main__':
         print('\t%s: %s' % (k, v))
 
     # arch search run manager
+    # ArchSearchRunManager is imported from 'nas_manager.py'
     arch_search_run_manager = ArchSearchRunManager(args.path, super_net, run_config, arch_search_config)
 
     # resume
