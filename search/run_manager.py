@@ -173,6 +173,7 @@ class RunManager:
         self.start_epoch = 0
 
         # initialize model (default)
+        # .init_model is from utils.my_modules.py
         self.net.init_model(run_config.model_init, run_config.init_div_groups)
 
         # a copy of net on cpu for latency estimation & mobile latency model

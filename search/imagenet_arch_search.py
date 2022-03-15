@@ -90,6 +90,8 @@ parser.add_argument('--grad_update_arch_param_every', type=int, default=5)
 parser.add_argument('--grad_update_steps', type=int, default=1)
 parser.add_argument('--grad_binary_mode', type=str, default='full_v2', choices=['full_v2', 'full', 'two'])
 parser.add_argument('--grad_data_batch', type=int, default=None)
+
+# what is the reg_loss_type beyond?
 parser.add_argument('--grad_reg_loss_type', type=str, default='mul#log', choices=['add#linear', 'mul#log'])
 parser.add_argument('--grad_reg_loss_lambda', type=float, default=1e-1)  # grad_reg_loss_params
 parser.add_argument('--grad_reg_loss_alpha', type=float, default=0.2)  # grad_reg_loss_params
@@ -148,6 +150,7 @@ if __name__ == '__main__':
     )
 
     # build arch search config from args
+    # adam optimizer is for nas
     if args.arch_opt_type == 'adam':
         args.arch_opt_param = {
             'betas': (args.arch_adam_beta1, args.arch_adam_beta2),
@@ -155,12 +158,18 @@ if __name__ == '__main__':
         }
     else:
         args.arch_opt_param = None
+
+    # select which platform to train the network on
     if args.target_hardware is None:
         args.ref_value = None
     else:
         args.ref_value = ref_values[args.target_hardware]['%.2f' % args.width_mult]
+
+    # select the way to optimize architecture search
     if args.arch_algo == 'grad':
         from nas_manager import GradientArchSearchConfig
+
+        # select the loss type, default: 'mul#log' (??????????)
         if args.grad_reg_loss_type == 'add#linear':
             args.grad_reg_loss_params = {'lambda': args.grad_reg_loss_lambda}
         elif args.grad_reg_loss_type == 'mul#log':
@@ -171,6 +180,8 @@ if __name__ == '__main__':
         else:
             args.grad_reg_loss_params = None
         arch_search_config = GradientArchSearchConfig(**args.__dict__)
+
+    # reinforcement learning based nas
     elif args.arch_algo == 'rl':
         from nas_manager import RLArchSearchConfig
         arch_search_config = RLArchSearchConfig(**args.__dict__)

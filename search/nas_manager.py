@@ -147,11 +147,13 @@ class ArchSearchRunManager:
 
     def __init__(self, path, super_net, run_config: RunConfig, arch_search_config: ArchSearchConfig):
         # init weight parameters & build weight_optimizer
+        # call RunManager in 'run_manager.py'
         self.run_manager = RunManager(path, super_net, run_config, True)
 
         self.arch_search_config = arch_search_config
 
         # init architecture parameters
+        # net is defined by net(self), which return self.run_manager.net.module
         self.net.init_arch_params(
             self.arch_search_config.arch_init_type, self.arch_search_config.arch_init_ratio,
         )
@@ -271,6 +273,7 @@ class ArchSearchRunManager:
                 self.net.reset_binary_gates()  # random sample binary gates
                 self.net.unused_modules_off()  # remove unused module for speedup
                 output = self.run_manager.net(images)  # forward (DataParallel)
+
                 # loss
                 if self.run_manager.run_config.label_smoothing > 0:
                     loss = cross_entropy_with_label_smoothing(
@@ -283,6 +286,7 @@ class ArchSearchRunManager:
                 losses.update(loss, images.size(0))
                 top1.update(acc1[0], images.size(0))
                 top5.update(acc5[0], images.size(0))
+
                 # compute gradient and do SGD step
                 self.run_manager.net.zero_grad()  # zero grads of weight_param, arch_param & binary_param
                 loss.backward()
@@ -349,6 +353,7 @@ class ArchSearchRunManager:
             top1 = AverageMeter()
             top5 = AverageMeter()
             entropy = AverageMeter()
+
             # switch to train mode
             self.run_manager.net.train()
 
@@ -362,6 +367,7 @@ class ArchSearchRunManager:
                 # network entropy
                 net_entropy = self.net.entropy()
                 entropy.update(net_entropy.data.item() / arch_param_num, 1)
+
                 # train weight parameters if not fix_net_weights
                 if not fix_net_weights:
                     images, labels = images.to(self.run_manager.device), labels.to(self.run_manager.device)
@@ -369,13 +375,15 @@ class ArchSearchRunManager:
                     self.net.reset_binary_gates()  # random sample binary gates
                     self.net.unused_modules_off()  # remove unused module for speedup
                     output = self.run_manager.net(images)  # forward (DataParallel)
-                    # loss
+
+
                     if self.run_manager.run_config.label_smoothing > 0:
                         loss = cross_entropy_with_label_smoothing(
                             output, labels, self.run_manager.run_config.label_smoothing
                         )
                     else:
                         loss = self.run_manager.criterion(output, labels)
+
                     # measure accuracy and record loss
                     acc1, acc5 = accuracy(output, labels, topk=(1, 5))
                     losses.update(loss, images.size(0))
@@ -387,11 +395,14 @@ class ArchSearchRunManager:
                     self.run_manager.optimizer.step()  # update weight parameters
                     # unused modules back
                     self.net.unused_modules_back()
+
                 # skip architecture parameter updates in the first epoch
                 if epoch > 0:
                     # update architecture parameters according to update_schedule
                     for j in range(update_schedule.get(i, 0)):
                         start_time = time.time()
+
+                        # RL based search
                         if isinstance(self.arch_search_config, RLArchSearchConfig):
                             reward_list, net_info_list = self.rl_update_step(fast=True)
                             used_time = time.time() - start_time
@@ -399,7 +410,11 @@ class ArchSearchRunManager:
                                 epoch + 1, i, used_time, sum(reward_list) / len(reward_list), net_info_list
                             )
                             self.write_log(log_str, prefix='rl', should_print=False)
+
+                        # gradient based search
                         elif isinstance(self.arch_search_config, GradientArchSearchConfig):
+
+                            # call gradient_step() function to optimize architecture
                             arch_loss, exp_value = self.gradient_step()
                             used_time = time.time() - start_time
                             log_str = 'Architecture [%d-%d]\t Time %.4f\t Loss %.4f\t %s %s' % \
@@ -408,6 +423,7 @@ class ArchSearchRunManager:
                             self.write_log(log_str, prefix='gradient', should_print=False)
                         else:
                             raise ValueError('do not support: %s' % type(self.arch_search_config))
+
                 # measure elapsed time
                 batch_time.update(time.time() - end)
                 end = time.time()
@@ -424,6 +440,7 @@ class ArchSearchRunManager:
                                losses=losses, entropy=entropy, top1=top1, top5=top5, lr=lr)
                     self.run_manager.write_log(batch_log, 'train')
 
+            # one epoch is done
             # print current network architecture
             self.write_log('-' * 30 + 'Current Architecture [%d]' % (epoch + 1) + '-' * 30, prefix='arch')
             for idx, block in enumerate(self.net.blocks):
@@ -451,6 +468,8 @@ class ArchSearchRunManager:
                 'state_dict': self.net.state_dict()
             })
 
+
+        # all epoches are done
         # convert to normal network according to architecture parameters
         normal_net = self.net.cpu().convert_to_normal_net()
         print('Total training params: %.2fM' % (count_parameters(normal_net) / 1e6))
